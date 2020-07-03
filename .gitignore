@@ -50,6 +50,7 @@ build.*
 testing.log
 testing/build.log
 testing/bin/
+src/project_version.cpp
 testing/src/project_version.cpp
 testing/src/project_version.h
 .__tmp.log
