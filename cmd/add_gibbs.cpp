@@ -50,11 +50,11 @@ inline void set_index (const ImageType& lr, ImageType& hr, size_t axis)
 }
 
 
-inline cdouble phase_shift (const ImageType& lr)
+inline cdouble phase_shift (const ImageType& lr, const size_t factor)
 {
   cdouble p (1.0, 0.0);
   for (int a = 0; a < 3; ++a)
-    p *= std::exp (cdouble (0.0, (Math::pi*indexshift(lr.index(a), lr.size(a))) / lr.size(a)));
+    p *= std::exp (cdouble (0.0, ((factor-1.0)/factor) * (Math::pi*indexshift(lr.index(a), lr.size(a))) / lr.size(a)));
   return p;
 }
 
@@ -97,7 +97,7 @@ void run()
     set_index (lowres_FT, highres_FT, 0);
     set_index (lowres_FT, highres_FT, 1);
     set_index (lowres_FT, highres_FT, 2);
-    lowres_FT.value() = phase_shift (lowres_FT) * cdouble (highres_FT.value());
+    lowres_FT.value() = phase_shift (lowres_FT, factor) * cdouble (highres_FT.value());
   }
 
   Math::FFT (lowres_FT, 0, FFTW_BACKWARD);
