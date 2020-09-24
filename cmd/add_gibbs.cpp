@@ -20,10 +20,11 @@ void usage() {
   SYNOPSIS = "Adding Gibbs-ringing to 3D image.";
 
   DESCRIPTION
-    + "This reads an input nifti file and outputs an image with added Gibbs-ringing.";
+    + "This reads an input image and outputs an image with added Gibbs-ringing.";
 
   ARGUMENTS
     + Argument ("inImg", "input image to be read").type_image_in()
+    + Argument ("scale", "scale factor by which to downsample").type_integer(1, 20)
     + Argument ("outImg", "outuput image").type_image_out();
 
 }
@@ -35,55 +36,77 @@ using ImageType = Image<cdouble>;
 
 
 // gives proper index according to fourier indices
-inline double indexshift(ssize_t n, ssize_t size) {
+inline ssize_t indexshift(ssize_t n, ssize_t size) {
   if (n > size/2) n -= size;
   return n;
 }
 
 
-void AddGibbsRinging (size_t axis, ImageType& input, ImageType& output) 
+
+inline void set_index (const ImageType& lr, ImageType& hr, size_t axis)
 {
-	int N = input.size(axis);
+  ssize_t pos = indexshift (lr.index(axis), lr.size(axis));
+  hr.index(axis) = pos < 0 ? hr.size(axis) + pos : pos;
+}
 
-	for (int i = 0; i < N/8; i++) {
-		output.index(axis) = input.index(axis) = i;
-		output.value() = input.value();
 
-		output.index(axis) = input.index(axis) = i + N;
-		output.value() = input.value();
-	}
-
+inline cdouble phase_shift (const ImageType& lr)
+{
+  cdouble p (1.0, 0.0);
+  for (int a = 0; a < 3; ++a)
+    p *= std::exp (cdouble (0.0, (Math::pi*indexshift(lr.index(a), lr.size(a))) / lr.size(a)));
+  return p;
 }
 
 
 void run()
 {
-	// reading input
-	auto input = ImageType::open(argument[0]);
-	
-	// modifying header to create low resolution of input
-	Header header (input);
-	header.datatype() = DataType::CFloat32;
-	auto image_FT = ImageType::scratch (header, "FFT of input image");
-	// header.scale_() = 4.0;
+  // reading input
+  auto input = ImageType::open(argument[0]);
 
-	// create output image
-	auto output = ImageType::create(argument[1],header);
-	//auto image_FT = ImageType::scratch (header, "FFT of input image");
+  // modifying header to create low resolution of input
+  Header header (input);
+  header.datatype() = DataType::CFloat32;
+  auto highres_FT = ImageType::scratch (header, "FFT of input image");
 
-	// 3D fft of input
-	Math::FFT(input,image_FT,0,FFTW_FORWARD);
-	Math::FFT(image_FT,1,FFTW_FORWARD);
-	Math::FFT(image_FT,2,FFTW_FORWARD);
+  const int factor = argument[1];
 
-	// add gibbs-ringing
-	AddGibbsRinging (0, image_FT, output);
-	AddGibbsRinging (1, image_FT, output);
-	AddGibbsRinging (2, image_FT, output);
+  // create output image
+  header.size(0) /= factor;
+  header.size(1) /= factor;
+  header.size(2) /= factor;
+  header.spacing(0) *= factor;
+  header.spacing(1) *= factor;
+  header.spacing(2) *= factor;
 
-	Math::FFT (output, 0, FFTW_BACKWARD);
-  Math::FFT (output, 1, FFTW_BACKWARD);
-  Math::FFT (output, 2, FFTW_BACKWARD);
+  for (size_t j = 0; j < 3; ++j)
+    for (size_t i = 0; i < 3; ++i)
+      header.transform()(i,3) += 0.5 * (header.spacing(j) - input.spacing(j)) * header.transform()(i,j);
+
+  auto lowres_FT = ImageType::scratch (header, "FFT of reduced image");
+
+  header.datatype() = DataType::Float32;
+  auto output = ImageType::create(argument[2],header);
+
+  // 3D fft of input
+  Math::FFT (input, highres_FT, 0, FFTW_FORWARD);
+  Math::FFT (highres_FT, 1, FFTW_FORWARD);
+  Math::FFT (highres_FT, 2, FFTW_FORWARD);
+
+  for (auto l = Loop (lowres_FT, 0, 3) (lowres_FT); l; ++l) {
+    set_index (lowres_FT, highres_FT, 0);
+    set_index (lowres_FT, highres_FT, 1);
+    set_index (lowres_FT, highres_FT, 2);
+    lowres_FT.value() = phase_shift (lowres_FT) * cdouble (highres_FT.value());
+  }
+
+  Math::FFT (lowres_FT, 0, FFTW_BACKWARD);
+  Math::FFT (lowres_FT, 1, FFTW_BACKWARD);
+  Math::FFT (lowres_FT, 2, FFTW_BACKWARD);
+
+  const double scale = 1.0 / ( highres_FT.size(0) * highres_FT.size(1) * highres_FT.size(2));
+  for (auto l = Loop (lowres_FT, 0, 3) (output, lowres_FT); l; ++l)
+    output.value() = cdouble (lowres_FT.value()).real() * scale;
 }
 
 
