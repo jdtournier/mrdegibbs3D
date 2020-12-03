@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# usage: ./noisify input noise output
+#
+#    e.g.: ./noisify in.mif 10 out.nii
+
+input="$1"
+noise="$2"
+output="$3"
+shift 3
+
+mrcalc "$input" randn "$noise" -mult -add 2 -pow randn "$noise" -mult 2 -pow -add -sqrt "$output" "$@"
+
+
