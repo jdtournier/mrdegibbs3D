@@ -1,0 +1,11 @@
+# pick the anatomical image, upsample to higher resolution, and set to zero:
+mrgrid anat.nii regrid -voxel 0.5 - | mrconvert - -axes 0,1,2 - | mrcalc - 0 -mult phantom.mif -force
+
+
+# draw 3 spheres of different intensities and locations on it:
+mredit phantom.mif -sphere 160,256,256 60 100 -sphere 200,290,256 30 200 -sphere 120,210,256 20 30
+
+
+# (optional) draw 3 orthogonal planes filled with zeros of different thicknesses and locations:
+mredit phantom.mif -plane 0 185:195 0 -plane 1 200:205 0 -plane 2 190:210 0
+
