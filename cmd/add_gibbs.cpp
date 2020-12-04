@@ -27,6 +27,10 @@ void usage() {
     + Argument ("scale", "scale factor by which to downsample").type_integer(1, 20)
     + Argument ("outImg", "outuput image").type_image_out();
 
+  OPTIONS
+    + Option ("partial_fourier", "specify partial Fourier factor, as a floating point value between 0.5 & 1 (default: 1)")
+    +  Argument ("axis").type_integer (0, 2)
+    +  Argument ("factor").type_float (0.5, 1.0);
 }
 
 
@@ -59,6 +63,16 @@ inline cdouble phase_shift (const ImageType& lr, const size_t factor)
 }
 
 
+inline bool is_outside_partial_fourier (const ImageType& im, const int axis, const float factor)
+{
+  if (im.index(axis) < im.size(axis)/2)
+    return false;
+  return im.index(axis) < im.size(axis)*(1.5 - factor);
+}
+
+
+
+
 void run()
 {
   // reading input
@@ -83,6 +97,11 @@ void run()
     for (size_t i = 0; i < 3; ++i)
       header.transform()(i,3) += 0.5 * (header.spacing(j) - input.spacing(j)) * header.transform()(i,j);
 
+  float pf[3] = { 1.0, 1.0, 1.0 };
+  auto opt = get_options ("partial_fourier");
+  if (opt.size())
+    pf[int(opt[0][0])] = opt[0][1];
+
   auto lowres_FT = ImageType::scratch (header, "FFT of reduced image");
 
   header.datatype() = DataType::Float32;
@@ -94,6 +113,10 @@ void run()
   Math::FFT (highres_FT, 2, FFTW_FORWARD);
 
   for (auto l = Loop (lowres_FT, 0, 3) (lowres_FT); l; ++l) {
+    if (is_outside_partial_fourier (lowres_FT, 0, pf[0]) ||
+        is_outside_partial_fourier (lowres_FT, 1, pf[1]) ||
+        is_outside_partial_fourier (lowres_FT, 2, pf[2]))
+      continue;
     set_index (lowres_FT, highres_FT, 0);
     set_index (lowres_FT, highres_FT, 1);
     set_index (lowres_FT, highres_FT, 2);
@@ -106,7 +129,7 @@ void run()
 
   const double scale = 1.0 / ( highres_FT.size(0) * highres_FT.size(1) * highres_FT.size(2));
   for (auto l = Loop (lowres_FT, 0, 3) (output, lowres_FT); l; ++l)
-    output.value() = cdouble (lowres_FT.value()).real() * scale;
+    output.value() = std::abs (cdouble (lowres_FT.value())) * scale;
 }
 
 
