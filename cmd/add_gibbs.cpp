@@ -104,7 +104,7 @@ void run()
 
   auto lowres_FT = ImageType::scratch (header, "FFT of reduced image");
 
-  header.datatype() = DataType::Float32;
+  header.datatype() = DataType::CFloat32;
   auto output = ImageType::create(argument[2],header);
 
   // 3D fft of input
@@ -122,6 +122,7 @@ void run()
     set_index (lowres_FT, highres_FT, 2);
     lowres_FT.value() = phase_shift (lowres_FT, factor) * cdouble (highres_FT.value());
   }
+  //save (lowres_FT, "PF.nii");
 
   Math::FFT (lowres_FT, 0, FFTW_BACKWARD);
   Math::FFT (lowres_FT, 1, FFTW_BACKWARD);
@@ -129,7 +130,7 @@ void run()
 
   const double scale = 1.0 / ( highres_FT.size(0) * highres_FT.size(1) * highres_FT.size(2));
   for (auto l = Loop (lowres_FT, 0, 3) (output, lowres_FT); l; ++l)
-    output.value() = std::abs (cdouble (lowres_FT.value())) * scale;
+    output.value() = cdouble (lowres_FT.value()) * scale;
 }
 
 
