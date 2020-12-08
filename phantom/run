@@ -1,0 +1,17 @@
+#!/bin/bash
+
+
+set -ex
+
+[[ $# == 3 ]] || { echo usage: ./generate scale pf noise; false; }
+
+export PATH=../bin:$PATH
+
+scale=$1
+pf=$2
+noise=$3
+
+add_gibbs phantom.mif $scale -partial_fourier 1 $pf phantom_s${scale}_pf${pf}.mif -force
+noisify phantom_s${scale}_pf${pf}.mif $noise phantom_s${scale}_pf${pf}_n${noise}.mif -force
+deGibbs3D phantom_s${scale}_pf${pf}_n${noise}.mif phantom_s${scale}_pf${pf}_n${noise}_degibbs.mif -force
+

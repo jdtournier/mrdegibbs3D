@@ -9,6 +9,6 @@ noise="$2"
 output="$3"
 shift 3
 
-mrcalc "$input" randn "$noise" -mult -add 2 -pow randn "$noise" -mult 2 -pow -add -sqrt "$output" "$@"
+mrcalc "$input" randn randn -complex "$noise" -mult -add -abs "$output" "$@"
 
 
