@@ -1,0 +1,24 @@
+#!/bin/bash
+
+target="-18.5011,51.6143,-52.0177"
+focus_ROI="-18.6449,50.9752,-51.7942"
+target_ROI="-22.6449,45.9752,-58.7942"
+
+view_options="-size 1536,512 -config MRViewOrthoAsRow 1 -config MRViewDockFloating 1 -mode 2 -fov 150 -noannot -focus $target -interpolation 0 -intensity_range -10,210 -colourmap 1 -capture.folder figures -capture.prefix"
+view_options_ROI="-size 1152,256 -fov 40 -interpolation 1 -focus $focus_ROI -target $target_ROI -capture.prefix"
+
+function grab_vols {
+  while [ $# -gt 0 ];do
+    echo -n "-volume $1 -capture.grab "
+    shift
+  done
+}
+
+mrcat phantom_s2_pf1_n{0,5,10,20}_degibbs.mif -axis 3 - | mrview - $view_options snr- $(grab_vols 0 1 2 3) $view_options_ROI snr_ROI- $(grab_vols 0 1 2 3) -exit
+
+mrview phantom.mif $view_options original- -capture.grab $view_options_ROI original_ROI- -capture.grab -exit
+
+mrcat phantom_s2_regrid.mif phantom_s2_pf1_n0.mif phantom_s2_pf1_n0_degibbs.mif phantom_s2_pf1_filter05.mif phantom_s2_pf1_filter00.mif -axis 3 - | mrcalc - -abs - | mrview - $view_options method- $(grab_vols 0 1 2 3 4) $view_options_ROI method_ROI- $(grab_vols 0 1 2 3 4) -exit
+
+mrcat phantom_s2_regrid.mif phantom_s2_pf0.75_n0.mif phantom_s2_pf0.75_n0_degibbs.mif phantom_s2_pf0.75_filter05.mif phantom_s2_pf0.75_filter00.mif -axis 3 - | mrcalc - -abs - | mrview - $view_options partial_fourier- $(grab_vols 0 1 2 3 4) $view_options_ROI partial_fourier_ROI- $(grab_vols 0 1 2 3 4) -exit
+
