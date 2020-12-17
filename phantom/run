@@ -1,17 +1,25 @@
 #!/bin/bash
 
 
-set -ex
+set -e
 
 [[ $# == 3 ]] || { echo usage: ./generate scale pf noise; false; }
 
-export PATH=../bin:$PATH
+export PATH=~/exp/3dGibbs/bin:$PATH
 
 scale=$1
 pf=$2
 noise=$3
 
 add_gibbs phantom.mif $scale -partial_fourier 1 $pf phantom_s${scale}_pf${pf}.mif -force
+mrgrid phantom.mif regrid -template phantom_s${scale}_pf${pf}.mif phantom_s${scale}_regrid.mif -force
+filter_kspace phantom_s${scale}_pf${pf}.mif -inflection 0 phantom_s${scale}_pf${pf}_filter00.mif -force
+filter_kspace phantom_s${scale}_pf${pf}.mif -inflection 0.5 phantom_s${scale}_pf${pf}_filter05.mif -force
+noisify phantom_s${scale}_pf${pf}.mif 0 phantom_s${scale}_pf${pf}_n0.mif -force
 noisify phantom_s${scale}_pf${pf}.mif $noise phantom_s${scale}_pf${pf}_n${noise}.mif -force
+deGibbs3D phantom_s${scale}_pf${pf}_n0.mif phantom_s${scale}_pf${pf}_n0_degibbs.mif -force
 deGibbs3D phantom_s${scale}_pf${pf}_n${noise}.mif phantom_s${scale}_pf${pf}_n${noise}_degibbs.mif -force
+mrcalc  phantom_s${scale}_regrid.mif phantom_s${scale}_pf${pf}_n0.mif -sub phantom_s${scale}_pf${pf}_regrid_diff.mif -force
+mrcalc phantom_s${scale}_pf${pf}_n0_degibbs.mif phantom_s${scale}_pf${pf}_n0.mif -sub phantom_s${scale}_pf${pf}_n0_diff.mif -force
+mrcalc phantom_s${scale}_pf${pf}_n${noise}_degibbs.mif phantom_s${scale}_pf${pf}_n${noise}.mif -sub phantom_s${scale}_pf${pf}_n${noise}_diff.mif -force
 
