@@ -221,42 +221,69 @@ void run()
   const int num_shifts = 20;
 
 
+
   // reading input and assigning output
   auto input = ImageType::open(argument[0]);
   Header header (input);
-  header.datatype() = DataType::CFloat32;
-  auto image_FT = ImageType::scratch (header, "FFT of input image");
-  auto image_filtered = ImageType::scratch (header, "filtered image");
-
   header.datatype() = DataType::Float32;
-  auto output = OutputImageType::create (argument[1], header);
+  auto output = Image<float>::create (argument[1], header);
 
-  ProgressBar progress ("performing 3D Gibbs ringing removal", 3);
+  // set up scratch images:
+  header.datatype() = DataType::CFloat32;
+  header.ndim() = 3;
+  auto image_FT = ImageType::scratch (header, "FFT of input volume");
+  auto image_filtered = ImageType::scratch (header, "filtered volume");
 
-  // full 3D FFT of input:
-  INFO ("performing initial 3D forward Fourier transform...");
-  Math::FFT (input, image_FT, 0, FFTW_FORWARD);
-  Math::FFT (image_FT, 1, FFTW_FORWARD);
-  Math::FFT (image_FT, 2, FFTW_FORWARD);
 
-  for (int axis = 0; axis < 3; ++axis) {
+  size_t nvol = 1;
+  for (size_t n = 3; n < input.ndim(); ++n)
+    nvol *= input.size(n);
+  ProgressBar progress ("performing 3D Gibbs ringing removal", 3*nvol);
 
-    // filter along x:
-    INFO ("filtering for axis "+str(axis)+"...");
-    ThreadedLoop(image_FT).run (Filter(axis), image_FT, image_filtered);
+  for (auto l = Loop (3, input.ndim())(input, output); l; l++) {
+    std::string vol_idx;
+    for (size_t n = 3; n < input.ndim(); ++n)
+      vol_idx += str(input.index(n)) + " ";
+    if (vol_idx.size())
+      INFO ("processing volume [ " + vol_idx + "]");
 
-    // then inverse FT back to image domain:
-    INFO ("applying 3D backward Fourier transform...");
-    Math::FFT (image_filtered, 0, FFTW_BACKWARD);
-    Math::FFT (image_filtered, 1, FFTW_BACKWARD);
-    Math::FFT (image_filtered, 2, FFTW_BACKWARD);
+    // need a quick adapter to fool FFT into operating on single volume:
+    class Volume : public ImageType {
+      public:
+        Volume (const ImageType& parent) : ImageType (parent) { }
+        size_t ndim () const { return 3; }
+    } vol_in (input);
 
-    // apply unringing operation on desired axis:
-    INFO ("performing unringing along axis "+str(axis)+"...");
-    ThreadedLoop (image_filtered, strides_for_axis (axis))
-      .run_outer (LineProcessor (axis, image_filtered, output, minW, maxW, num_shifts));
+    // full 3D FFT of input:
+    INFO ("performing initial 3D forward Fourier transform...");
+    Math::FFT (vol_in, image_FT, 0, FFTW_FORWARD);
+    Math::FFT (image_FT, 1, FFTW_FORWARD);
+    Math::FFT (image_FT, 2, FFTW_FORWARD);
 
-    ++progress;
+    for (int axis = 0; axis < 3; ++axis) {
+
+      // filter along x:
+      INFO ("filtering for axis "+str(axis)+"...");
+      ThreadedLoop(image_FT).run (Filter(axis), image_FT, image_filtered);
+
+      // then inverse FT back to image domain:
+      INFO ("applying 3D backward Fourier transform...");
+      Math::FFT (image_filtered, 0, FFTW_BACKWARD);
+      Math::FFT (image_filtered, 1, FFTW_BACKWARD);
+      Math::FFT (image_filtered, 2, FFTW_BACKWARD);
+
+      // apply unringing operation on desired axis and accumulate result:
+      INFO ("performing unringing along axis "+str(axis)+"...");
+      ThreadedLoop (image_filtered, strides_for_axis (axis))
+        .run_outer (LineProcessor (axis, image_filtered, output, minW, maxW, num_shifts));
+
+      ++progress;
+    }
+
+    // Don't increment loop if image is 3D (or less) - just break out
+    // immediately, otherwise the loop increment call will crash.
+    if (input.ndim() <= 3)
+      break;
   }
 
 }
